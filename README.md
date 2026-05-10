@@ -7,9 +7,18 @@
     <img alt="Desktop Tauri 2" src="https://img.shields.io/badge/desktop-Tauri%202-f59e0b?style=flat-square&labelColor=0f172a" />
     <img alt="UI React 19" src="https://img.shields.io/badge/ui-React%2019-60a5fa?style=flat-square&labelColor=0f172a" />
     <img alt="Runtime Rust 2024" src="https://img.shields.io/badge/runtime-Rust%202024-f97316?style=flat-square&labelColor=0f172a" />
-    <a href="https://t.me/simprintapp"><img alt="Community Telegram" src="https://img.shields.io/badge/community-Telegram-38bdf8?style=flat-square&labelColor=0f172a" /></a>
-    <img alt="QQ Group 1105174006" src="https://img.shields.io/badge/qq-1105174006-12b7f5?style=flat-square&labelColor=0f172a" />
   </p>
+  <table border="1" cellspacing="0" cellpadding="12">
+    <tr>
+      <td align="center">
+        <strong>👉 Join the Simprint Community</strong><br />
+        <sub>Join now for updates, questions, and contributor discussions.</sub><br />
+        <sub>👇 Pick a group below</sub><br /><br />
+        <a href="https://t.me/simprintapp"><img alt="Telegram Community" src="https://img.shields.io/badge/Telegram-@simprintapp-27a7e7?style=for-the-badge" /></a>
+        <img alt="QQ Group 1105174006" src="https://img.shields.io/badge/QQ%20Group-1105174006-12b7f5?style=for-the-badge" />
+      </td>
+    </tr>
+  </table>
   <p>
     <strong>English</strong> | <a href="./README.zh-CN.md">简体中文</a>
   </p>
