@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Loader2, X, Cookie, Plus } from 'lucide-react';
+import { Check, Loader2, X, Cookie } from 'lucide-react';
 import { FormattedDialog, FormattedDialogFooter } from '@/components/formatted-dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -147,7 +147,7 @@ export function EnvironmentEditCookiesDialog({ onComplete }: EnvironmentEditCook
           <Label className="text-xs font-medium text-foreground">
             {t('dialog.editCookies.addCookie')}
           </Label>
-          <div className="flex gap-2">
+          <div className="relative">
             <TextareaInput
               value={cookieText}
               onChange={(e) => {
@@ -155,19 +155,17 @@ export function EnvironmentEditCookiesDialog({ onComplete }: EnvironmentEditCook
                 setError('');
               }}
               placeholder="SID=xxx; HSID=yyy"
-              className="flex-1 text-sm min-h-[96px] font-mono"
+              className="min-h-[96px] pr-14 pb-12 text-sm font-mono"
               disabled={saving || loading}
             />
             <Button
               type="button"
-              variant="outline"
-              size="sm"
+              size="icon"
               onClick={handleAddCookieGroup}
               disabled={saving || loading}
-              className="shrink-0 self-start"
+              className="absolute right-3 bottom-3 h-9 w-9 rounded-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
             >
-              <Plus className="h-4 w-4 mr-1.5" />
-              {t('dialog.editCookies.add')}
+              <Check className="h-4 w-4" />
             </Button>
           </div>
           {error ? <p className="text-[10px] text-destructive">{error}</p> : null}
