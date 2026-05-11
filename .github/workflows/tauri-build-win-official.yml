@@ -140,7 +140,9 @@ jobs:
           Set-ConfigValue '^(updater_temp_dir\s*=\s*)".*"$' "${{ env.APP_UPDATER_TEMP_DIR }}"
           Set-ConfigValue '^(downlaod_url\s*=\s*)".*"$' "${{ env.APP_WEBVIEW_DOWNLOAD_URL }}"
 
-          Set-Content -Path $configPath -Value $content -NoNewline
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $resolvedConfigPath = (Resolve-Path $configPath).Path
+          [System.IO.File]::WriteAllText($resolvedConfigPath, $content, $utf8NoBom)
 
       # 在 CI 构建期间使用 fixed 版本的 Tauri 配置
       # 先将 src-tauri/tauri.conf.fixed.json 覆盖为 src-tauri/tauri.conf.json，
@@ -173,7 +175,7 @@ jobs:
         run: node deploy/generate-latest-json.mjs
 
       - name: Publish GitHub release assets
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GT_TOKEN || github.token }}
           GH_REPO: ${{ github.repository }}
@@ -181,7 +183,7 @@ jobs:
 
       - name: Upload installer to R2 storage
         # tag push 时上传到 R2
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -215,7 +217,7 @@ jobs:
 
       - name: Upload latest.json to R2 root
         # tag push 时上传到 R2
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -244,7 +246,7 @@ jobs:
           path: latest.json
 
       - name: Publish version metadata
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           VERSION_API_URL: ${{ secrets.VERSION_API_URL }}
           VERSION_API_KEY: ${{ secrets.VERSION_API_KEY }}

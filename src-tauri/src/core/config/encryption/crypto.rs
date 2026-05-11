@@ -78,14 +78,10 @@ fn pre_transform(data: &[u8], key: &[u8; 16]) -> Vec<u8> {
         result.push(byte ^ key[i % 16]);
     }
 
-    // 字节重排（简单的置换）
-    let mut permuted = vec![0u8; result.len()];
-    for (i, &byte) in result.iter().enumerate() {
-        let new_pos = (i.wrapping_mul(7).wrapping_add(13)) % result.len();
-        permuted[new_pos] = byte;
-    }
-
-    permuted
+    result.reverse();
+    let shift = transform_shift(result.len(), key);
+    result.rotate_left(shift);
+    result
 }
 
 /// 数据预变换的逆操作
@@ -94,12 +90,10 @@ fn pre_transform_reverse(data: &[u8], key: &[u8; 16]) -> Vec<u8> {
         return Vec::new();
     }
 
-    // 逆置换：对于每个原始位置 i，找到它在加密后的位置
-    let mut unpermuted = vec![0u8; data.len()];
-    for i in 0..data.len() {
-        let encrypted_pos = (i.wrapping_mul(7).wrapping_add(13)) % data.len();
-        unpermuted[i] = data[encrypted_pos];
-    }
+    let mut unpermuted = data.to_vec();
+    let shift = transform_shift(unpermuted.len(), key);
+    unpermuted.rotate_right(shift);
+    unpermuted.reverse();
 
     // 逆 XOR
     let mut result = Vec::with_capacity(unpermuted.len());
@@ -242,4 +236,45 @@ fn post_transform(data: &[u8], key: &[u8; 16]) -> Vec<u8> {
 /// 数据后变换的逆操作
 fn post_transform_reverse(data: &[u8], key: &[u8; 16]) -> Vec<u8> {
     data.iter().enumerate().map(|(i, &b)| b.wrapping_sub(key[i % 16])).collect()
+}
+
+fn transform_shift(len: usize, key: &[u8; 16]) -> usize {
+    if len <= 1 {
+        return 0;
+    }
+
+    let seed = key
+        .iter()
+        .take(4)
+        .fold(0usize, |acc, byte| (acc << 8) | (*byte as usize));
+    (seed.wrapping_add(len).wrapping_add(13)) % len
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decrypt, encrypt};
+
+    #[test]
+    fn roundtrip_preserves_all_lengths_up_to_1024() {
+        for len in 0..=1024usize {
+            let input = (0..len)
+                .map(|index| ((index * 31 + 17) % 256) as u8)
+                .collect::<Vec<_>>();
+            let encrypted = encrypt(&input).expect("encrypt should succeed");
+            let decrypted = decrypt(&encrypted).expect("decrypt should succeed");
+            assert_eq!(decrypted, input, "roundtrip mismatch for len={len}");
+        }
+    }
+
+    #[test]
+    fn roundtrip_preserves_lengths_that_are_multiples_of_seven() {
+        for len in [7usize, 14, 497, 504, 4095, 4096, 4097] {
+            let input = (0..len)
+                .map(|index| ((index * 13 + 29) % 256) as u8)
+                .collect::<Vec<_>>();
+            let encrypted = encrypt(&input).expect("encrypt should succeed");
+            let decrypted = decrypt(&encrypted).expect("decrypt should succeed");
+            assert_eq!(decrypted, input, "roundtrip mismatch for len={len}");
+        }
+    }
 }

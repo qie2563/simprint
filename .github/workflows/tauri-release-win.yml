@@ -86,7 +86,9 @@ jobs:
           Set-ConfigValue '^(updater_temp_dir\s*=\s*)".*"$' "${{ env.APP_UPDATER_TEMP_DIR }}"
           Set-ConfigValue '^(downlaod_url\s*=\s*)".*"$' "${{ env.APP_WEBVIEW_DOWNLOAD_URL }}"
 
-          Set-Content -Path $configPath -Value $content -NoNewline
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          $resolvedConfigPath = (Resolve-Path $configPath).Path
+          [System.IO.File]::WriteAllText($resolvedConfigPath, $content, $utf8NoBom)
 
       - name: Use fixed Tauri config
         shell: powershell

@@ -385,6 +385,15 @@ mod config_encrypt {
             );
         });
 
+        std::str::from_utf8(&config_bytes).unwrap_or_else(|e| {
+            panic!(
+                "[BUILD ERROR] Config file '{}' is not valid UTF-8: {}\n\
+                 Please ensure workflow/local scripts write this file with UTF-8 encoding.",
+                config_path.display(),
+                e
+            );
+        });
+
         let encrypted = crypto::encrypt(&config_bytes).expect("Failed to encrypt config");
 
         let out_path = Path::new(&out_dir).join("config_encrypted.bin");
