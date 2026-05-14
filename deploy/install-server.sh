@@ -1,17 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${SIMPRINT_SERVER_IMAGE:-ghcr.io/simprint/simprint-server:latest}"
+SERVER_IMAGE="${SIMPRINT_SERVER_IMAGE:-ghcr.io/simprint/simprint-server:latest}"
+UPDATE_IMAGE="${SIMPRINT_UPDATE_IMAGE:-ghcr.io/simprint/simprint-update-server:latest}"
+CONSOLE_IMAGE="${SIMPRINT_CONSOLE_IMAGE:-ghcr.io/simprint/simprint-console-server:latest}"
+
 TARGET_DIR="$PWD/simprint-self-hosted"
 CONFIG_DIR="$TARGET_DIR/configs"
 COMPOSE_FILE="$TARGET_DIR/docker-compose.yml"
-CONFIG_FILE="$CONFIG_DIR/config.toml"
+SERVER_CONFIG_FILE="$CONFIG_DIR/server.toml"
+UPDATE_CONFIG_FILE="$CONFIG_DIR/update.toml"
+CONSOLE_CONFIG_FILE="$CONFIG_DIR/console.toml"
 
-DEFAULT_SERVER_SECRET="Nuexz9Y2hRc5Z6HK7Atb"
+DEFAULT_APP_SECRET="Nuexz9Y2hRc5Z6HK7Atb"
 DEFAULT_POSTGRES_PASSWORD="simprint-postgres-password"
-PUBLIC_BASE_URL="https://pub-39307a5e69c74324855a762027cbf9bf.r2.dev"
-STORAGE_ENDPOINT="https://example.invalid"
-REFERRAL_LINK_PREFIX="https://www.simprint.app/download"
+DEFAULT_PUBLIC_BASE_URL="https://pub-39307a5e69c74324855a762027cbf9bf.r2.dev"
+DEFAULT_REFERRAL_LINK_PREFIX="https://www.simprint.app/download"
+
+PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-$DEFAULT_PUBLIC_BASE_URL}"
+STORAGE_ENDPOINT="${STORAGE_ENDPOINT:-}"
+STORAGE_ACCESS_KEY="${STORAGE_ACCESS_KEY:-}"
+STORAGE_SECRET_ACCESS_KEY="${STORAGE_SECRET_ACCESS_KEY:-}"
+REFERRAL_LINK_PREFIX="${REFERRAL_LINK_PREFIX:-$DEFAULT_REFERRAL_LINK_PREFIX}"
 SMTP_SERVER="${SMTP_SERVER:-}"
 SMTP_USERNAME="${SMTP_USERNAME:-}"
 SMTP_PASSWORD="${SMTP_PASSWORD:-}"
@@ -119,15 +129,18 @@ fi
 mkdir -p "$CONFIG_DIR"
 
 require_secret_with_default POSTGRES_PASSWORD "PostgreSQL password" "$DEFAULT_POSTGRES_PASSWORD"
+require_value STORAGE_ENDPOINT "Object storage endpoint"
+require_value STORAGE_ACCESS_KEY "Object storage access key"
+require_value STORAGE_SECRET_ACCESS_KEY "Object storage secret access key" true
 require_value SMTP_SERVER "SMTP server"
 require_value SMTP_USERNAME "SMTP username"
 require_value SMTP_PASSWORD "SMTP password" true
 
-cat >"$CONFIG_FILE" <<EOF
+cat >"$SERVER_CONFIG_FILE" <<EOF
 [app]
 name = "simprint-server"
 port = 40041
-secret = "$DEFAULT_SERVER_SECRET"
+secret = "$DEFAULT_APP_SECRET"
 prefix = "/api/v1"
 encrypt_secret_location = "./assets/secret"
 route_whitelists = [
@@ -157,8 +170,8 @@ url = "redis://redis:6379?protocol=resp3"
 [storage]
 endpoint = "$STORAGE_ENDPOINT"
 public_base_url = "$PUBLIC_BASE_URL"
-access_key = "disabled"
-secret_access_key = "disabled"
+access_key = "$STORAGE_ACCESS_KEY"
+secret_access_key = "$STORAGE_SECRET_ACCESS_KEY"
 bucket = "simprint-client"
 avatar_root = "avatars"
 extension_root = "extensions"
@@ -177,6 +190,85 @@ max_proxies = 99999
 max_rpa_tasks = 99999
 EOF
 
+cat >"$UPDATE_CONFIG_FILE" <<EOF
+[app]
+name = "simprint-update-server"
+port = 40042
+secret = "$DEFAULT_APP_SECRET"
+prefix = "/api/v1"
+route_whitelists = [
+    "POST+/api/v1/versions/check",
+    "POST+/api/v1/maintenances/active",
+    "GET+/api/v1/health"
+]
+
+[database]
+url = "postgres://simprint:$POSTGRES_PASSWORD@postgres:5432/simprintdb"
+max_connections = 25
+min_connections = 5
+max_lifetime = 3000
+acquire_timeout = 30
+idle_timeout = 600
+
+[redis]
+url = "redis://redis:6379?protocol=resp3"
+
+[storage]
+public_base_url = "$PUBLIC_BASE_URL"
+bucket = "simprint-client"
+version_root = "versions"
+EOF
+
+cat >"$CONSOLE_CONFIG_FILE" <<EOF
+[app]
+name = "simprint-console-server"
+port = 40043
+secret = "$DEFAULT_APP_SECRET"
+prefix = "/api/v1"
+route_whitelists = [
+    "POST+/api/v1/users/login",
+    "POST+/api/v1/users/reset-password",
+    "POST+/api/v1/users/reset-password-send-code",
+    "POST+/api/v1/users/refresh-credentials",
+    "GET+/api/v1/secret/public/key",
+    "GET+/api/v1/time/now",
+    "GET+/api/v1/health",
+]
+
+[database]
+url = "postgres://simprint:$POSTGRES_PASSWORD@postgres:5432/simprintdb"
+max_connections = 25
+min_connections = 5
+max_lifetime = 3000
+acquire_timeout = 30
+idle_timeout = 600
+
+[redis]
+url = "redis://redis:6379?protocol=resp3"
+
+[storage]
+endpoint = "$STORAGE_ENDPOINT"
+public_base_url = "$PUBLIC_BASE_URL"
+access_key = "$STORAGE_ACCESS_KEY"
+secret_access_key = "$STORAGE_SECRET_ACCESS_KEY"
+bucket = "simprint-client"
+avatar_root = "avatars"
+extension_root = "extensions"
+version_root = "versions"
+
+[smtp]
+smtp_server = "$SMTP_SERVER"
+smtp_username = "$SMTP_USERNAME"
+smtp_password = "$SMTP_PASSWORD"
+
+[workspace_quota]
+[workspace_quota.default]
+max_environments = 8
+max_team_members = 1
+max_proxies = 99999
+max_rpa_tasks = 99999
+EOF
+
 cat >"$COMPOSE_FILE" <<EOF
 services:
   postgres:
@@ -186,6 +278,8 @@ services:
       POSTGRES_DB: simprintdb
       POSTGRES_USER: simprint
       POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    ports:
+      - "5432:5432"
     volumes:
       - simprint-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -194,6 +288,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - simprint-network
 
   redis:
     image: redis:7-alpine
@@ -207,11 +303,13 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - simprint-network
 
   simprint-server:
-    image: $IMAGE
+    image: $SERVER_IMAGE
     container_name: simprint-server
-    command: ["-f=/app/configs/config.toml"]
+    command: ["-f=/app/configs/server.toml"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -225,6 +323,50 @@ services:
     environment:
       - RUST_LOG=info
     restart: unless-stopped
+    networks:
+      - simprint-network
+
+  simprint-update-gateway:
+    image: $UPDATE_IMAGE
+    container_name: simprint-update-gateway
+    command: ["-f=/app/configs/update.toml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "40042:40042"
+    volumes:
+      - ./configs:/app/configs:ro
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
+    networks:
+      - simprint-network
+
+  simprint-console-gateway:
+    image: $CONSOLE_IMAGE
+    container_name: simprint-console-gateway
+    command: ["--config", "/app/configs/console.toml", "serve"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "40043:40043"
+    volumes:
+      - ./configs:/app/configs:ro
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
+    networks:
+      - simprint-network
+
+networks:
+  simprint-network:
+    name: simprint-network
 
 volumes:
   simprint-postgres-data:
@@ -234,10 +376,14 @@ EOF
 
 echo "Using compose command: ${COMPOSE_CMD[*]}"
 echo "Working directory: $TARGET_DIR"
-echo "Server image: $IMAGE"
+echo "Server image: $SERVER_IMAGE"
+echo "Update image: $UPDATE_IMAGE"
+echo "Console image: $CONSOLE_IMAGE"
 echo "Generated files:"
 echo "  - $COMPOSE_FILE"
-echo "  - $CONFIG_FILE"
+echo "  - $SERVER_CONFIG_FILE"
+echo "  - $UPDATE_CONFIG_FILE"
+echo "  - $CONSOLE_CONFIG_FILE"
 
 (
   cd "$TARGET_DIR"
