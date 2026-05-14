@@ -122,8 +122,7 @@ create_console_api_key() {
 
   while [ "$attempt" -le "$max_attempts" ]; do
     if output=$(
-      cd "$TARGET_DIR"
-      "${COMPOSE_CMD[@]}" run --rm -T --no-deps simprint-console-gateway \
+      docker exec simprint-console-gateway /app/app \
         --config /app/configs/console.toml apikey create --name "extension-sync" 2>&1
     ); then
       api_key_line=$(printf '%s\n' "$output" | sed -n 's/^[[:space:]]*X-API-KEY: //p' | tail -n 1)
@@ -139,7 +138,7 @@ create_console_api_key() {
       exit 1
     fi
 
-    echo "Waiting for simprint-console-gateway to finish database initialization (attempt $attempt/$max_attempts)..."
+    echo "Waiting for simprint-console-gateway to become ready (attempt $attempt/$max_attempts)..."
     sleep 3
     attempt=$((attempt + 1))
   done
