@@ -89,7 +89,7 @@ export const environmentResources = {
       moveToGroup: '移动至分组',
       assignTag: '分配标签',
       removeTag: '移除标签',
-      delete: '永久删除',
+      delete: '批量删除',
       batchStartFailed: '批量启动失败',
       batchStopFailed: '批量停止失败',
       batchDeleteFailed: '批量删除失败',
