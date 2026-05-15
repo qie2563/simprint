@@ -13,7 +13,6 @@ import type {
   CreateTemplateRequest,
   CreateTemplateResponse,
 } from './index.types';
-import { resolveFingerprintConfig } from '../utils/resolve-fingerprint-config';
 
 // 导出类型
 export * from './index.types';
@@ -344,36 +343,7 @@ export async function createEnvironment(
   config: WindowConfig,
   options?: CreateEnvironmentOptions
 ): Promise<CreateEnvironmentResponse> {
-  // 获取代理信息（用于解析指纹配置）
-  const { listProxies } = await import('../../../environment-manager/src/api');
-  let proxyConfig = null;
-
-  if (options?.proxyUuid) {
-    const proxies = await listProxies();
-    const proxy = proxies.find(p => p.uuid === options.proxyUuid);
-    if (proxy) {
-      proxyConfig = {
-        proxy_type: proxy.proxy_type,
-        host: proxy.host,
-        port: proxy.port,
-        username: proxy.username || undefined,
-        password: proxy.password || undefined,
-      };
-    }
-  }
-
-  // 解析指纹配置
-  const resolvedBasicSettings = await resolveFingerprintConfig(
-    config.basicSettings,
-    proxyConfig
-  );
-
-  const resolvedConfig = {
-    ...config,
-    basicSettings: resolvedBasicSettings,
-  };
-
-  const requestData = transformWindowConfigToRequest(resolvedConfig, options);
+  const requestData = transformWindowConfigToRequest(config, options);
   const result = await post<CreateEnvironmentResponse>(
     API_ENDPOINTS.CREATE_ENVIRONMENT,
     requestData
@@ -394,41 +364,8 @@ export async function batchCreateEnvironments(
   proxyUuids: string[] | undefined, // 代理 UUID 数组，按顺序分配给环境
   options?: CreateEnvironmentOptions
 ): Promise<CreateEnvironmentResponse[]> {
-  // 获取代理信息（用于解析指纹配置）
-  const { listProxies } = await import('../../../environment-manager/src/api');
-  const proxies = proxyUuids && proxyUuids.length > 0 ? await listProxies() : [];
-
-  // 解析每个配置的指纹配置
-  const resolvedConfigs = await Promise.all(
-    configs.map(async (config, index) => {
-      // 获取当前环境对应的代理
-      const proxyUuid = proxyUuids && index < proxyUuids.length ? proxyUuids[index] : undefined;
-      const proxy = proxyUuid ? proxies.find(p => p.uuid === proxyUuid) : null;
-
-      // 构建代理配置对象
-      const proxyConfig = proxy ? {
-        proxy_type: proxy.proxy_type,
-        host: proxy.host,
-        port: proxy.port,
-        username: proxy.username || undefined,
-        password: proxy.password || undefined,
-      } : null;
-
-      // 解析指纹配置
-      const resolvedBasicSettings = await resolveFingerprintConfig(
-        config.basicSettings,
-        proxyConfig
-      );
-
-      return {
-        ...config,
-        basicSettings: resolvedBasicSettings,
-      };
-    })
-  );
-
   // 构建批量创建请求
-  const environments: CreateEnvironmentRequest[] = resolvedConfigs.map((config, index) => {
+  const environments: CreateEnvironmentRequest[] = configs.map((config, index) => {
     const request = transformWindowConfigToRequest(config, {
       // 统一设置分组和标签（批量创建时这些应该相同）
       groupUuid: options?.groupUuid,

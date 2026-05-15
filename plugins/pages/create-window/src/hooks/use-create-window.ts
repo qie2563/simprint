@@ -12,7 +12,6 @@ import {
 } from '../api';
 import {
   updateEnvironment,
-  listProxies,
   listAccounts,
   type ProxyItem,
   type AccountItem,
@@ -373,39 +372,11 @@ export function useCreateWindow(
     try {
       // 编辑模式：更新环境
       if (editUuid) {
-        // 获取代理信息（用于解析指纹配置）
         const proxyUuid = windowConfig.windowInfo.proxyUuids.length > 0
           ? windowConfig.windowInfo.proxyUuids[0]
           : undefined;
 
-        let proxyConfig = null;
-        if (proxyUuid) {
-          const proxies = await listProxies();
-          const proxy = proxies.find(p => p.uuid === proxyUuid);
-          if (proxy) {
-            proxyConfig = {
-              proxy_type: proxy.proxy_type,
-              host: proxy.host,
-              port: proxy.port,
-              username: proxy.username || undefined,
-              password: proxy.password || undefined,
-            };
-          }
-        }
-
-        // 解析指纹配置
-        const { resolveFingerprintConfig } = await import('../utils/resolve-fingerprint-config');
-        const resolvedBasicSettings = await resolveFingerprintConfig(
-          windowConfig.basicSettings,
-          proxyConfig
-        );
-
-        const resolvedConfig = {
-          ...windowConfig,
-          basicSettings: resolvedBasicSettings,
-        };
-
-        const request = transformWindowConfigToRequest(resolvedConfig, {
+        const request = transformWindowConfigToRequest(windowConfig, {
           groupUuid: selectedGroupUuid,
           tagUuids: selectedTagUuids.length > 0 ? selectedTagUuids : undefined,
           accountUuids:

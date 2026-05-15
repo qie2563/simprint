@@ -13,6 +13,7 @@ use crate::infrastructure::runtime::{
 };
 
 use super::extension;
+use super::language;
 use super::timezone;
 use super::types::{
     AccountInfo, BatchLaunchRequest, BatchLaunchResult, CdpEndpointResponse, KernelStatusEmitter,
@@ -275,8 +276,26 @@ async fn prepare_start_request(
     );
 
     if let Some(ref mut config) = fingerprint_config {
-        if let Some(detected_timezone) = timezone::detect_timezone(proxy.as_ref()).await {
-            config.timezone = Some(detected_timezone);
+        let should_detect_language = match config.language.as_deref().map(str::trim) {
+            Some(language) => language.is_empty() || language.eq_ignore_ascii_case("ip"),
+            None => true,
+        };
+
+        if should_detect_language {
+            if let Some(detected_language) = language::detect_language(proxy.as_ref()).await {
+                config.language = Some(detected_language);
+            }
+        }
+
+        let should_detect_timezone = match config.timezone.as_deref().map(str::trim) {
+            Some(timezone) => timezone.is_empty() || timezone.eq_ignore_ascii_case("ip"),
+            None => true,
+        };
+
+        if should_detect_timezone {
+            if let Some(detected_timezone) = timezone::detect_timezone(proxy.as_ref()).await {
+                config.timezone = Some(detected_timezone);
+            }
         }
     }
 
@@ -344,7 +363,8 @@ async fn prepare_start_request(
         env_uuid: env_id,
         user_data_dir: user_data_dir.to_string_lossy().to_string(),
         cookies: cookies.map(|items| {
-            items.into_iter()
+            items
+                .into_iter()
                 .map(|item| CookieGroup {
                     site: item.site,
                     cookie_text: item.cookie_text,

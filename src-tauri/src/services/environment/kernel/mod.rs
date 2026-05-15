@@ -8,6 +8,7 @@ use std::fs;
 
 pub mod downloader;
 pub mod extension;
+pub mod language;
 mod runtime_bridge;
 mod state;
 pub mod timezone;
