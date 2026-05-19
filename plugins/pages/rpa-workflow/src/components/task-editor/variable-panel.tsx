@@ -67,7 +67,7 @@ export function VariablePanel({
     <div
       className={
         embedded
-          ? 'bg-background flex flex-col min-h-0 overflow-hidden h-full'
+          ? 'bg-background flex flex-1 min-h-0 flex-col overflow-hidden'
           : 'w-80 border-l border-border bg-background flex flex-col min-h-0 overflow-hidden'
       }
     >

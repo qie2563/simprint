@@ -594,7 +594,8 @@ export class CdpBrowserAdapter implements BrowserAdapter {
     const scriptBody = JSON.stringify(script);
     return `(async () => {
       try {
-        const runner = new Function(${scriptBody});
+        const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+        const runner = new AsyncFunction(${scriptBody});
         const result = await runner();
         if (typeof result === 'string') {
           return { ok: true, value: result };

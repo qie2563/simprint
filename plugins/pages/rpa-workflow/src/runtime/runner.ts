@@ -1,5 +1,6 @@
 ﻿import type { RpaCapturedSelector, RpaWorkflowSchema, RpaWorkflowStep } from '../types';
 import type { BrowserAdapter, BrowserAdapterRunResult, BrowserSession } from './browser-adapter';
+import { executeLocalRpaScript } from './tauri';
 
 export type RpaRunnerStepStatus = 'pending' | 'running' | 'awaiting_input' | 'success' | 'failed';
 
@@ -10,6 +11,8 @@ export interface RpaRunnerStepEvent {
   error?: string;
   loopIteration?: number;
   loopTotal?: number;
+  incomingFromStepId?: string;
+  incomingBranchKey?: 'true' | 'false';
 }
 
 export interface RpaRunnerCapturedTargetEvent {
@@ -41,10 +44,16 @@ type StepExecutionResult =
   | {
       type: 'next';
       nextStepId: string | null;
+      outgoingBranchKey?: 'true' | 'false';
     }
   | {
       type: 'break_loop';
     };
+
+interface StepIncomingEdge {
+  fromStepId: string;
+  branchKey?: 'true' | 'false';
+}
 
 export class RpaRunner {
   constructor(private readonly adapter: BrowserAdapter) {}
@@ -62,6 +71,9 @@ export class RpaRunner {
     const screenshots: string[] = [];
     const variables = this.initializeWorkflowVariables(workflow);
     let currentStepId: string | null = workflow.start_step_id;
+    let incomingEdge: StepIncomingEdge | null = {
+      fromStepId: 'start',
+    };
 
     await this.adapter.connect(session);
     try {
@@ -71,11 +83,24 @@ export class RpaRunner {
           throw new Error(`Unknown workflow step: ${currentStepId}`);
         }
 
-        const result = await this.runStep(step, stepMap, screenshots, variables, options);
+        const result = await this.runStep(
+          step,
+          stepMap,
+          screenshots,
+          variables,
+          options,
+          incomingEdge
+        );
         if (result.type === 'break_loop') {
           throw new Error('BREAK_LOOP_OUTSIDE_LOOP');
         }
 
+        incomingEdge = result.nextStepId
+          ? {
+              fromStepId: step.id,
+              branchKey: result.outgoingBranchKey,
+            }
+          : null;
         currentStepId = result.nextStepId;
       }
     } finally {
@@ -90,12 +115,15 @@ export class RpaRunner {
     stepMap: Map<string, RpaWorkflowStep>,
     screenshots: string[],
     variables: Record<string, unknown>,
-    options?: RpaRunnerOptions
+    options?: RpaRunnerOptions,
+    incomingEdge?: StepIncomingEdge | null
   ): Promise<StepExecutionResult> {
     options?.onStepStatusChange?.({
       stepId: step.id,
       stepType: step.type,
       status: 'running',
+      incomingFromStepId: incomingEdge?.fromStepId,
+      incomingBranchKey: incomingEdge?.branchKey,
     });
 
     try {
@@ -162,7 +190,8 @@ export class RpaRunner {
               status: 'running',
             });
 
-            await this.adapter.click(captured.primary);
+            const target = this.storeCapturedTarget(step, captured);
+            await this.adapter.click(target);
           } else if (step.target) {
             await this.adapter.click(step.target);
           } else {
@@ -200,7 +229,8 @@ export class RpaRunner {
               status: 'running',
             });
 
-            await this.adapter.fill(captured.primary, inputValue);
+            const target = this.storeCapturedTarget(step, captured);
+            await this.adapter.fill(target, inputValue);
           } else if (step.target) {
             await this.adapter.fill(step.target, inputValue);
           } else {
@@ -241,7 +271,7 @@ export class RpaRunner {
               status: 'running',
             });
 
-            uploadTarget = captured.primary;
+            uploadTarget = this.storeCapturedTarget(step, captured);
           }
 
           if (!uploadTarget) {
@@ -289,7 +319,7 @@ export class RpaRunner {
               status: 'running',
             });
 
-            waitTarget = captured.primary;
+            waitTarget = this.storeCapturedTarget(step, captured);
           }
 
           if (!waitTarget) {
@@ -333,7 +363,7 @@ export class RpaRunner {
                 status: 'running',
               });
 
-              target = captured.primary;
+              target = this.storeCapturedTarget(step, captured);
             }
 
             if (!target) {
@@ -373,6 +403,17 @@ export class RpaRunner {
           }
 
           nextStepId = matched ? step.branches?.true ?? null : step.branches?.false ?? null;
+          const outgoingBranchKey = matched ? 'true' : 'false';
+          options?.onStepStatusChange?.({
+            stepId: step.id,
+            stepType: step.type,
+            status: 'success',
+          });
+          return {
+            type: 'next',
+            nextStepId,
+            outgoingBranchKey,
+          };
           break;
         }
 
@@ -404,7 +445,7 @@ export class RpaRunner {
               stepType: step.type,
               status: 'running',
             });
-            scrollTarget = captured.primary;
+            scrollTarget = this.storeCapturedTarget(step, captured);
           }
 
           await this.adapter.scroll({
@@ -472,7 +513,7 @@ export class RpaRunner {
               status: 'running',
             });
 
-            extractTarget = captured.primary;
+            extractTarget = this.storeCapturedTarget(step, captured);
           }
 
           if (!extractTarget) {
@@ -503,7 +544,11 @@ export class RpaRunner {
             throw new Error('SCRIPT_REQUIRED');
           }
 
-          const executed = await this.adapter.executeScript(script);
+          const executionMode = step.config?.executionMode === 'local' ? 'local' : 'browser';
+          const executed =
+            executionMode === 'local'
+              ? await executeLocalRpaScript(script, variables)
+              : await this.adapter.executeScript(script);
           options?.onDataExtracted?.({
             stepId: step.id,
             stepType: step.type,
@@ -544,7 +589,7 @@ export class RpaRunner {
               status: 'running',
             });
 
-            screenshotTarget = captured.primary;
+            screenshotTarget = this.storeCapturedTarget(step, captured);
           }
 
           const data = await this.adapter.screenshot({
@@ -645,6 +690,7 @@ export class RpaRunner {
       });
 
       let currentStepId: string | null = entryStep.id;
+      let incomingEdge: StepIncomingEdge | null = null;
       const visited = new Set<string>();
 
       while (currentStepId && loopChildIds.has(currentStepId)) {
@@ -658,11 +704,24 @@ export class RpaRunner {
           throw new Error(`Unknown workflow step: ${currentStepId}`);
         }
 
-        const result = await this.runStep(childStep, stepMap, screenshots, variables, options);
+        const result = await this.runStep(
+          childStep,
+          stepMap,
+          screenshots,
+          variables,
+          options,
+          incomingEdge
+        );
         if (result.type === 'break_loop') {
           return step.next;
         }
 
+        incomingEdge = result.nextStepId
+          ? {
+              fromStepId: childStep.id,
+              branchKey: result.outgoingBranchKey,
+            }
+          : null;
         currentStepId =
           result.nextStepId && loopChildIds.has(result.nextStepId) ? result.nextStepId : null;
       }
@@ -734,6 +793,20 @@ export class RpaRunner {
     }
 
     return current;
+  }
+
+  private storeCapturedTarget(step: RpaWorkflowStep, captured: RpaCapturedSelector): RpaWorkflowSelector {
+    step.target = captured.primary;
+
+    const nextConfig = {
+      ...(step.config ?? {}),
+      selector: captured.primary.value,
+      selectorCandidates: captured.candidates,
+      selectorSnapshot: captured.snapshot,
+    };
+    step.config = nextConfig;
+
+    return captured.primary;
   }
 
   private initializeWorkflowVariables(workflow: RpaWorkflowSchema): Record<string, unknown> {

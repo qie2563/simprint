@@ -221,6 +221,7 @@ export const rpaResources = {
         loopCondition: '条件循环',
         iterations: '循环次数',
         script: '脚本代码',
+        localExecution: '是否本地执行',
         fullPage: '全页截图',
         screenshotPreview: '截图预览',
         noScreenshotYet: '运行后将在这里显示截图结果',
@@ -380,6 +381,8 @@ export const rpaResources = {
         tabCloseLastUnsupported: '至少需要保留一个标签页，无法关闭最后一个标签页。',
         noActiveTabAfterClose: '关闭标签页后未找到可用的活动标签页，请重新运行。',
         breakLoopOutside: '退出循环节点只能在循环区域内使用。',
+        nodeRuntimeNotFound: '本地执行需要 Node.js 环境，但当前系统未检测到 Node。',
+        localScriptTimeout: '本地脚本执行超时。',
       },
       menu: {
         exportJson: '导出为 JSON',
@@ -612,6 +615,7 @@ export const rpaResources = {
         loopCondition: 'Conditional',
         iterations: 'Iterations',
         script: 'Script Code',
+        localExecution: 'Run Locally',
         fullPage: 'Full Page',
         screenshotPreview: 'Screenshot Preview',
         noScreenshotYet: 'The screenshot result will appear here after run',
@@ -771,6 +775,8 @@ export const rpaResources = {
         tabCloseLastUnsupported: 'At least one tab must remain open. The last tab cannot be closed.',
         noActiveTabAfterClose: 'No active tab was available after closing the tab. Please run again.',
         breakLoopOutside: 'Break Loop can only be used inside a loop region.',
+        nodeRuntimeNotFound: 'Local execution requires Node.js, but Node was not found on this system.',
+        localScriptTimeout: 'Local script execution timed out.',
       },
       menu: {
         exportJson: 'Export as JSON',

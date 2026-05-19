@@ -38,7 +38,12 @@ import {
   type RpaRunnerStepStatus,
 } from '../../runtime/runner';
 import { ComponentPanel, type ComponentItem } from './component-panel';
-import { FlowCanvas, type FlowStep } from './flow-canvas';
+import {
+  DEFAULT_SPECIAL_NODE_POSITIONS,
+  FlowCanvas,
+  type FlowStep,
+  type SpecialNodePositions,
+} from './flow-canvas';
 import { getLoopAutoDimensions, getLoopAutoPosition } from './loop-layout';
 import { PropertyPanel } from './property-panel';
 import { TaskSettingsForm, type TaskConfig, type TaskVariable } from './task-settings-form';
@@ -105,6 +110,8 @@ interface RunStepItem {
   error?: string;
   loopIteration?: number;
   loopTotal?: number;
+  incomingFromStepId?: string;
+  incomingBranchKey?: 'true' | 'false';
 }
 
 function buildAnonymousProxyConfig(
@@ -151,6 +158,9 @@ export function TaskEditor() {
 
   const [config, setConfig] = useState<TaskConfig>(() => createDefaultTaskConfig());
   const [steps, setSteps] = useState<FlowStep[]>([]);
+  const [specialPositions, setSpecialPositions] = useState<SpecialNodePositions>(
+    DEFAULT_SPECIAL_NODE_POSITIONS
+  );
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [selectedComponent, setSelectedComponent] = useState<ComponentItem | null>(null);
   const [saving, setSaving] = useState(false);
@@ -184,6 +194,19 @@ export function TaskEditor() {
           {
             current: step.loopIteration,
             total: step.loopTotal,
+          },
+        ])
+      ),
+    [runStepItems]
+  );
+  const stepIncomingEdgeMap = useMemo(
+    () =>
+      Object.fromEntries(
+        runStepItems.map((step) => [
+          step.id,
+          {
+            fromStepId: step.incomingFromStepId,
+            branchKey: step.incomingBranchKey,
           },
         ])
       ),
@@ -313,6 +336,18 @@ export function TaskEditor() {
         });
       }
 
+      if (error === 'NODE_RUNTIME_NOT_FOUND') {
+        return t('editor.errors.nodeRuntimeNotFound', {
+          defaultValue: '本地执行需要 Node.js 环境，但当前系统未检测到 Node。',
+        });
+      }
+
+      if (error === 'LOCAL_SCRIPT_TIMEOUT') {
+        return t('editor.errors.localScriptTimeout', {
+          defaultValue: '本地脚本执行超时。',
+        });
+      }
+
       if (error === 'TAB_TARGET_UNAVAILABLE' || error === 'RPA_BROWSER_NOT_FOUND') {
         return t('editor.errors.browserConnectionClosed', { defaultValue: '浏览器连接已关闭，请重新运行。' });
       }
@@ -358,6 +393,7 @@ export function TaskEditor() {
         const editorState = mapTaskDetailToEditorState(detail);
         setConfig(editorState.config);
         setSteps(editorState.steps);
+        setSpecialPositions(editorState.specialPositions);
       } catch (e) {
         if (!cancelled) {
           toast.error(e instanceof Error ? e.message : 'Failed to load task.');
@@ -403,6 +439,7 @@ export function TaskEditor() {
     const editorState = mapPortableTaskToEditorState(importedDocument);
     setConfig(editorState.config);
     setSteps(editorState.steps);
+    setSpecialPositions(editorState.specialPositions);
     setSelectedStepId(null);
     setSelectedComponent(null);
   }, [importedDocument, isEditing]);
@@ -546,6 +583,7 @@ export function TaskEditor() {
                                   script: '',
                                   outputKey: createDefaultScriptVariableName(),
                                   previewValue: '',
+                                  executionMode: 'browser',
                                 }
                         : {},
         enabled: true,
@@ -718,7 +756,7 @@ export function TaskEditor() {
 
     setSaving(true);
     try {
-      const payload = buildTaskPayload(config, steps);
+      const payload = buildTaskPayload(config, steps, specialPositions);
       if (isEditing && id) {
         await updateRpaTask({ ...payload, uuid: id });
       } else {
@@ -743,6 +781,8 @@ export function TaskEditor() {
               error: normalizeRunError(event.error),
               loopIteration: event.loopIteration ?? step.loopIteration,
               loopTotal: event.loopTotal ?? step.loopTotal,
+              incomingFromStepId: event.incomingFromStepId ?? step.incomingFromStepId,
+              incomingBranchKey: event.incomingBranchKey ?? step.incomingBranchKey,
             }
           : step
       )
@@ -837,6 +877,8 @@ export function TaskEditor() {
           Number.isFinite(step.config.iterations)
             ? Math.max(1, Math.trunc(step.config.iterations))
             : undefined,
+        incomingFromStepId: undefined,
+        incomingBranchKey: undefined,
       }))
     );
     setActiveRunEnvUuid(null);
@@ -912,6 +954,7 @@ export function TaskEditor() {
     }
 
     setSteps([]);
+    setSpecialPositions(DEFAULT_SPECIAL_NODE_POSITIONS);
     setSelectedStepId(null);
     setSelectedComponent(null);
     setRunStepItems([]);
@@ -998,10 +1041,12 @@ export function TaskEditor() {
         />
         <FlowCanvas
           steps={steps}
+          specialPositions={specialPositions}
           selectedStepId={activeStepId ?? selectedStepId}
           onSelectStep={setSelectedStepId}
           onDeleteStep={handleDeleteStep}
           onUpdateSteps={handleUpdateSteps}
+          onSpecialPositionsChange={setSpecialPositions}
           onDropComponent={handleAddComponent}
           onClearSteps={handleClearSteps}
           clearStepsDisabled={runButtonBusy || steps.length === 0}
@@ -1010,6 +1055,7 @@ export function TaskEditor() {
           stepStatuses={stepStatusMap}
           stepErrors={stepErrorMap}
           stepLoopProgress={loopProgressMap}
+          stepIncomingEdges={stepIncomingEdgeMap}
         />
         <div className="w-80 border-l border-border bg-background flex flex-col min-h-0 overflow-hidden">
           <Accordion
@@ -1021,11 +1067,21 @@ export function TaskEditor() {
           >
             <AccordionItem
               value="properties"
-              className={sidebarSection === 'properties' ? 'flex flex-1 min-h-0 flex-col' : 'shrink-0'}
+              className={
+                sidebarSection === 'properties'
+                  ? 'flex flex-1 min-h-0 flex-col [&>[data-slot=accordion-content]]:flex-1 [&>[data-slot=accordion-content]]:min-h-0'
+                  : 'shrink-0'
+              }
             >
               <AccordionTrigger className="px-3 py-2 text-xs font-semibold hover:no-underline">{t('editor.properties')}</AccordionTrigger>
-              <AccordionContent className={sidebarSection === 'properties' ? 'pb-0 flex-1 min-h-0' : 'pb-0'}>
-                <div className="h-full min-h-0">
+              <AccordionContent
+                className={
+                  sidebarSection === 'properties'
+                    ? 'flex h-full flex-1 min-h-0 flex-col overflow-hidden pb-0'
+                    : 'pb-0'
+                }
+              >
+                <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
                   <PropertyPanel
                     embedded
                     step={selectedStep}
@@ -1037,11 +1093,21 @@ export function TaskEditor() {
             </AccordionItem>
             <AccordionItem
               value="variables"
-              className={sidebarSection === 'variables' ? 'flex flex-1 min-h-0 flex-col' : 'shrink-0'}
+              className={
+                sidebarSection === 'variables'
+                  ? 'flex flex-1 min-h-0 flex-col [&>[data-slot=accordion-content]]:flex-1 [&>[data-slot=accordion-content]]:min-h-0'
+                  : 'shrink-0'
+              }
             >
               <AccordionTrigger className="px-3 py-2 text-xs font-semibold hover:no-underline">{t('editor.variablePanel', { defaultValue: '变量配置' })}</AccordionTrigger>
-              <AccordionContent className={sidebarSection === 'variables' ? 'pb-0 flex-1 min-h-0' : 'pb-0'}>
-                <div className="h-full min-h-0">
+              <AccordionContent
+                className={
+                  sidebarSection === 'variables'
+                    ? 'flex h-full flex-1 min-h-0 flex-col overflow-hidden pb-0'
+                    : 'pb-0'
+                }
+              >
+                <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
                   <VariablePanel
                     embedded
                     globalVariables={config.globalVariables}

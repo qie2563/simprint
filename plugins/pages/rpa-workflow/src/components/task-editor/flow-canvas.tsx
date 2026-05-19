@@ -56,12 +56,24 @@ export interface FlowStep {
   parentLoopId?: string | null;
 }
 
+export interface SpecialNodePositions {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+}
+
+export const DEFAULT_SPECIAL_NODE_POSITIONS: SpecialNodePositions = {
+  start: { x: 250, y: 0 },
+  end: { x: 250, y: 200 },
+};
+
 interface FlowCanvasProps {
   steps: FlowStep[];
+  specialPositions: SpecialNodePositions;
   selectedStepId: string | null;
   onSelectStep: (id: string | null) => void;
   onDeleteStep: (id: string) => void;
   onUpdateSteps: (steps: FlowStep[]) => void;
+  onSpecialPositionsChange: (positions: SpecialNodePositions) => void;
   onDropComponent: (
     component: ComponentItem,
     position: { x: number; y: number },
@@ -76,6 +88,7 @@ interface FlowCanvasProps {
   stepStatuses?: Record<string, RpaRunnerStepStatus>;
   stepErrors?: Record<string, string>;
   stepLoopProgress?: Record<string, { current?: number; total?: number }>;
+  stepIncomingEdges?: Record<string, { fromStepId?: string; branchKey?: 'true' | 'false' }>;
 }
 
 const nodeTypes: NodeTypes = {
@@ -84,11 +97,6 @@ const nodeTypes: NodeTypes = {
   endNode: EndNode,
   loopNode: LoopNode,
 };
-
-interface SpecialNodePositions {
-  start: { x: number; y: number };
-  end: { x: number; y: number };
-}
 
 function isLoopStep(step: FlowStep): boolean {
   return step.type === 'loop';
@@ -403,7 +411,8 @@ function buildGraphEdges(steps: FlowStep[], t: TFunction<'rpa'>): Edge[] {
 function styleEdgeByRunState(
   edge: Edge,
   stepStatuses: Record<string, RpaRunnerStepStatus>,
-  runStatus: FlowCanvasProps['runStatus']
+  runStatus: FlowCanvasProps['runStatus'],
+  stepIncomingEdges: Record<string, { fromStepId?: string; branchKey?: 'true' | 'false' }>
 ): Edge {
   const sourceStatus =
     edge.source === 'start'
@@ -431,6 +440,27 @@ function styleEdgeByRunState(
   }
 
   if (targetStatus === 'running' || targetStatus === 'awaiting_input') {
+    const incoming = stepIncomingEdges[edge.target];
+    const expectedHandle =
+      incoming?.branchKey === 'true'
+        ? 'branch-true'
+        : incoming?.branchKey === 'false'
+          ? 'branch-false'
+          : undefined;
+    const isActiveIncomingEdge =
+      incoming?.fromStepId === edge.source &&
+      (expectedHandle === undefined || expectedHandle === edge.sourceHandle);
+
+    if (!isActiveIncomingEdge) {
+      return {
+        ...edge,
+        animated: false,
+        style: { stroke: '#64748b', strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
+        labelStyle: { ...(edge.labelStyle ?? {}), fill: '#64748b' },
+      };
+    }
+
     const color = targetStatus === 'awaiting_input' ? '#d97706' : '#0ea5e9';
     return {
       ...edge,
@@ -544,10 +574,12 @@ function stepsToNodes(
 
 function FlowCanvasInner({
   steps,
+  specialPositions,
   selectedStepId,
   onSelectStep,
   onDeleteStep,
   onUpdateSteps,
+  onSpecialPositionsChange,
   onDropComponent,
   onClearSteps,
   clearStepsDisabled = false,
@@ -556,6 +588,7 @@ function FlowCanvasInner({
   stepStatuses = {},
   stepErrors = {},
   stepLoopProgress = {},
+  stepIncomingEdges = {},
 }: FlowCanvasProps) {
   const { t } = useTranslation('rpa');
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -563,21 +596,11 @@ function FlowCanvasInner({
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const { screenToFlowPosition } = useReactFlow();
 
-  const specialPositionsRef = useRef<SpecialNodePositions>({
-    start: { x: 250, y: 0 },
-    end: { x: 250, y: 200 },
-  });
-
-  const initialSpecialPositions: SpecialNodePositions = {
-    start: { x: 250, y: 0 },
-    end: { x: 250, y: 200 },
-  };
-
   const [nodes, setNodes, onNodesChange] = useNodesState(
     stepsToNodes(
       steps,
       onDeleteStep,
-      initialSpecialPositions,
+      specialPositions,
       t,
       runStatus,
       stepStatuses,
@@ -597,7 +620,7 @@ function FlowCanvasInner({
       stepsToNodes(
         steps,
         onDeleteStep,
-        specialPositionsRef.current,
+        specialPositions,
         t,
         runStatus,
         stepStatuses,
@@ -606,12 +629,12 @@ function FlowCanvasInner({
       )
     );
     setEdges(buildGraphEdges(steps, t));
-  }, [steps, onDeleteStep, setNodes, setEdges, t, runStatus, stepStatuses, stepErrors, stepLoopProgress]);
+  }, [steps, specialPositions, onDeleteStep, setNodes, setEdges, t, runStatus, stepStatuses, stepErrors, stepLoopProgress]);
 
 
 const styledEdges = useMemo(
-    () => edges.map((edge) => styleEdgeByRunState(edge, stepStatuses, runStatus)),
-    [edges, runStatus, stepStatuses]
+    () => edges.map((edge) => styleEdgeByRunState(edge, stepStatuses, runStatus, stepIncomingEdges)),
+    [edges, runStatus, stepStatuses, stepIncomingEdges]
   );
 
   const onConnect = useCallback(
@@ -738,10 +761,10 @@ const styledEdges = useMemo(
   const onNodeDragStop = useCallback(
     (event: ReactMouseEvent, node: Node) => {
       if (node.id === 'start' || node.id === 'end') {
-        specialPositionsRef.current = {
-          ...specialPositionsRef.current,
+        onSpecialPositionsChange({
+          ...specialPositions,
           [node.id]: node.position,
-        };
+        });
         return;
       }
 
@@ -893,7 +916,7 @@ const styledEdges = useMemo(
 
       onUpdateSteps(recalculatedSteps);
     },
-    [screenToFlowPosition, steps, onUpdateSteps]
+    [screenToFlowPosition, steps, specialPositions, onUpdateSteps, onSpecialPositionsChange]
   );
 
   const handleCanvasClick = useCallback(

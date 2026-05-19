@@ -10,6 +10,7 @@ pub mod logging;
 pub mod mcp;
 pub mod mihomo;
 pub mod network;
+pub mod rpa;
 pub mod security;
 pub mod store;
 pub mod updater;
@@ -75,6 +76,7 @@ pub fn register_handles() -> impl Fn(Invoke<tauri::Wry>) -> bool + Send + Sync +
         network::test_direct_ip,
         network::detect_proxy_ip,
         network::download_files,
+        rpa::execute_local_rpa_script,
         // Auth commands
         auth::login,
         auth::register,

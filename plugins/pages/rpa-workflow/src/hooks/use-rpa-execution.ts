@@ -120,6 +120,14 @@ function normalizeExecutionError(error: unknown): string {
     return '退出循环节点只能在循环区域内使用。';
   }
 
+  if (message === 'NODE_RUNTIME_NOT_FOUND' || message.includes('NODE_RUNTIME_NOT_FOUND')) {
+    return '本地执行需要 Node.js 环境，但当前系统未检测到 Node。';
+  }
+
+  if (message === 'LOCAL_SCRIPT_TIMEOUT' || message.includes('LOCAL_SCRIPT_TIMEOUT')) {
+    return '本地脚本执行超时。';
+  }
+
   if (message === 'TAB_TARGET_UNAVAILABLE' || message === 'RPA_BROWSER_NOT_FOUND') {
     return '当前标签页无法连接，请重新执行。';
   }

@@ -1,7 +1,11 @@
 ﻿import type { RpaTaskDetailDto, UpsertRpaTaskRequest } from '../../api';
 import type { PortableRpaTaskDocument } from '../../lib/rpa-transfer';
 import type { RpaWorkflowSchema, RpaWorkflowStep } from '../../types';
-import type { FlowStep } from './flow-canvas';
+import {
+  DEFAULT_SPECIAL_NODE_POSITIONS,
+  type FlowStep,
+  type SpecialNodePositions,
+} from './flow-canvas';
 import type { TaskConfig, TaskVariable } from './task-settings-form';
 
 const DEFAULT_NAVIGATE_URL = 'https://www.google.com';
@@ -10,6 +14,7 @@ const DEFAULT_INPUT_TEXT = 'Hello World';
 interface EditorState {
   config: TaskConfig;
   steps: FlowStep[];
+  specialPositions: SpecialNodePositions;
   workflow: RpaWorkflowSchema;
 }
 
@@ -34,6 +39,14 @@ interface StoredWorkflowStep {
 interface StoredWorkflowMeta {
   start_step_id?: string | null;
   global_variables?: Array<{ name?: string; value?: string }>;
+  start_position?: {
+    x?: number;
+    y?: number;
+  };
+  end_position?: {
+    x?: number;
+    y?: number;
+  };
 }
 
 function buildSelector(selector: unknown) {
@@ -52,6 +65,25 @@ function buildSelector(selector: unknown) {
 
 function asNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function readCanvasPosition(
+  value: unknown,
+  fallback: { x: number; y: number }
+): { x: number; y: number } {
+  if (
+    value &&
+    typeof value === 'object' &&
+    typeof (value as { x?: unknown }).x === 'number' &&
+    typeof (value as { y?: unknown }).y === 'number'
+  ) {
+    return {
+      x: (value as { x: number }).x,
+      y: (value as { y: number }).y,
+    };
+  }
+
+  return fallback;
 }
 
 function mapFlowStepType(type: string, config: Record<string, unknown>): string {
@@ -357,7 +389,11 @@ export function buildWorkflowSchema(config: TaskConfig, steps: FlowStep[]): RpaW
   };
 }
 
-export function buildTaskPayload(config: TaskConfig, steps: FlowStep[]): UpsertRpaTaskRequest {
+export function buildTaskPayload(
+  config: TaskConfig,
+  steps: FlowStep[],
+  specialPositions: SpecialNodePositions
+): UpsertRpaTaskRequest {
   const workflow = buildWorkflowSchema(config, steps);
 
   return {
@@ -384,6 +420,8 @@ export function buildTaskPayload(config: TaskConfig, steps: FlowStep[]): UpsertR
         workflow_meta: {
           start_step_id: workflow.start_step_id,
           global_variables: workflow.variables,
+          start_position: specialPositions.start,
+          end_position: specialPositions.end,
         },
         legacy_config: steps[index]?.config ?? {},
       },
@@ -417,6 +455,16 @@ export function mapTaskDetailToEditorState(detail: RpaTaskDetailDto): EditorStat
         }))
         .filter((variable) => variable.name.trim())
     : [];
+  const specialPositions: SpecialNodePositions = {
+    start: readCanvasPosition(
+      storedWorkflowMeta?.start_position,
+      DEFAULT_SPECIAL_NODE_POSITIONS.start
+    ),
+    end: readCanvasPosition(
+      storedWorkflowMeta?.end_position,
+      DEFAULT_SPECIAL_NODE_POSITIONS.end
+    ),
+  };
 
   const steps = sortedSteps.map((step, index) => {
     const storedStep = step.config?.workflow_step;
@@ -455,6 +503,7 @@ export function mapTaskDetailToEditorState(detail: RpaTaskDetailDto): EditorStat
   return {
     config,
     steps,
+    specialPositions,
     workflow: buildWorkflowSchema(config, steps),
   };
 }
@@ -538,6 +587,7 @@ export function mapPortableTaskToEditorState(document: PortableRpaTaskDocument):
   return {
     config,
     steps,
+    specialPositions: DEFAULT_SPECIAL_NODE_POSITIONS,
     workflow: buildWorkflowSchema(config, steps),
   };
 }

@@ -34,6 +34,10 @@ export interface RpaTabCloseResult {
   target_id: string;
 }
 
+export interface LocalRpaScriptExecutionResult {
+  value: string;
+}
+
 export type EnvironmentStatus =
   | 'initializing'
   | 'verifying'
@@ -77,4 +81,14 @@ export async function closeEnvironmentRpaTab(
   position: number
 ): Promise<RpaTabCloseResult> {
   return invoke<RpaTabCloseResult>('close_environment_rpa_tab', { envUuid, position });
+}
+
+export async function executeLocalRpaScript(
+  script: string,
+  variables: Record<string, unknown>
+): Promise<LocalRpaScriptExecutionResult> {
+  return invoke<LocalRpaScriptExecutionResult>('execute_local_rpa_script', {
+    script,
+    variables,
+  });
 }
