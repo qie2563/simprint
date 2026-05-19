@@ -536,7 +536,7 @@ export class RpaRunner {
           break;
         }
         case 'execute_js': {
-          const script = this.resolveTemplate(
+          const script = this.resolveScriptTemplate(
             typeof step.script === 'string' ? step.script.trim() : '',
             variables
           );
@@ -743,6 +743,34 @@ export class RpaRunner {
 
       if (typeof resolved === 'string') {
         return resolved;
+      }
+
+      if (typeof resolved === 'number' || typeof resolved === 'boolean') {
+        return String(resolved);
+      }
+
+      return JSON.stringify(resolved);
+    });
+  }
+
+  private resolveScriptTemplate(value: string, variables: Record<string, unknown>): string {
+    if (!value.includes('{{')) {
+      return value;
+    }
+
+    return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, expression: string) => {
+      const resolved = this.resolveVariableExpression(expression.trim(), variables);
+
+      if (resolved === undefined) {
+        return 'undefined';
+      }
+
+      if (resolved === null) {
+        return 'null';
+      }
+
+      if (typeof resolved === 'string') {
+        return JSON.stringify(resolved);
       }
 
       if (typeof resolved === 'number' || typeof resolved === 'boolean') {

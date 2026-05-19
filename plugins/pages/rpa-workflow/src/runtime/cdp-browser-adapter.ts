@@ -66,11 +66,11 @@ export class CdpBrowserAdapter implements BrowserAdapter {
     await Promise.race([
       this.client.waitForEvent('Page.loadEventFired', {
         sessionId,
-        timeoutMs: 15000,
+        timeoutMs: 60000,
       }),
       this.client.waitForEvent('Page.frameStoppedLoading', {
         sessionId,
-        timeoutMs: 15000,
+        timeoutMs: 60000,
       }),
     ]);
   }

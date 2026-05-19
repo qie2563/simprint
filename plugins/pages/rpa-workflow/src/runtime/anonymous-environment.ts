@@ -52,7 +52,7 @@ function resolvePlatform(): { system: string; platform: string } {
   return { system: 'Windows', platform: 'windows' };
 }
 
-async function waitForEndpoint(envUuid: string, timeoutMs = 15000): Promise<CdpEndpoint> {
+async function waitForEndpoint(envUuid: string, timeoutMs = 60000): Promise<CdpEndpoint> {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
