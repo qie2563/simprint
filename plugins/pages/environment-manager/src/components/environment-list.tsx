@@ -111,6 +111,8 @@ export function EnvironmentList() {
     selectionStore.clearSelection();
   };
 
+  const startIndex = (filtersStore.currentPage - 1) * filtersStore.pageSize;
+
   return (
     <div className="flex flex-col h-[calc(100vh-50px)]">
       <EnvironmentHeader
@@ -127,7 +129,7 @@ export function EnvironmentList() {
         availableGroups={availableGroups}
         loading={loading}
         onComplete={refresh}
-        startIndex={(filtersStore.currentPage - 1) * filtersStore.pageSize}
+        startIndex={startIndex}
       />
 
       <EnvironmentPagination
@@ -139,7 +141,11 @@ export function EnvironmentList() {
         onPageSizeChange={handlePageSizeChange}
       />
 
-      <EnvironmentBatchActions onComplete={refresh} />
+      <EnvironmentBatchActions
+        environments={filteredEnvironments}
+        startIndex={startIndex}
+        onComplete={refresh}
+      />
 
       <EnvironmentMoveToGroupDialog
         selectedIds={Array.from(selectionStore.selectedIds)}

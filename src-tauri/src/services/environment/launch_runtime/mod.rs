@@ -46,6 +46,7 @@ impl EnvironmentLaunchRuntimeService {
         env_uuid: String,
         launch_paths: LaunchPaths,
         status_emitter: Option<KernelStatusEmitter>,
+        display_id: Option<String>,
     ) -> Result<()> {
         let app = get_app_handle()?;
         let request = Self::build_launch_request(
@@ -53,6 +54,7 @@ impl EnvironmentLaunchRuntimeService {
             env_uuid,
             &launch_paths,
             status_emitter.clone(),
+            display_id,
         )
         .await?;
 
@@ -76,10 +78,20 @@ impl EnvironmentLaunchRuntimeService {
         env_uuids: Vec<String>,
         launch_paths: LaunchPaths,
         status_emitter: Option<KernelStatusEmitter>,
+        display_ids_by_env_uuid: Option<std::collections::HashMap<String, String>>,
     ) -> Result<Vec<BatchLaunchResult>> {
         let app = get_app_handle()?;
         let requests = try_join_all(env_uuids.into_iter().map(|env_uuid| {
-            Self::build_launch_request(app.clone(), env_uuid, &launch_paths, status_emitter.clone())
+            let display_id = display_ids_by_env_uuid
+                .as_ref()
+                .and_then(|items| items.get(&env_uuid).cloned());
+            Self::build_launch_request(
+                app.clone(),
+                env_uuid,
+                &launch_paths,
+                status_emitter.clone(),
+                display_id,
+            )
         }))
         .await?;
 
@@ -91,6 +103,7 @@ impl EnvironmentLaunchRuntimeService {
         env_uuid: String,
         launch_paths: &LaunchPaths,
         status_emitter: Option<KernelStatusEmitter>,
+        display_id: Option<String>,
     ) -> Result<BatchLaunchRequest> {
         let detail = get_environment_launch_detail(&env_uuid).await?;
         let env = detail
@@ -107,8 +120,7 @@ impl EnvironmentLaunchRuntimeService {
         .await?;
 
         let mut fingerprint_config = build_fingerprint_config(detail.config.as_ref());
-        fingerprint_config.env_id =
-            Some(env.id.map(|id| id.to_string()).unwrap_or_else(|| env.uuid.clone()));
+        fingerprint_config.env_id = display_id;
         fingerprint_config.env_name = Some(
             env.name
                 .clone()

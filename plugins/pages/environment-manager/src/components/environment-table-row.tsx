@@ -690,7 +690,7 @@ export function EnvironmentTableRow({
       if (isRunning) {
         setIsLocalStopping(true);
       }
-      await operations.toggleEnvironment(environment.uuid);
+      await operations.toggleEnvironment(environment.uuid, String(index));
     } catch (e) {
       // 失败时重置本地停止状态
       setIsLocalStopping(false);

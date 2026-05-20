@@ -3,12 +3,19 @@ import { toast } from 'sonner';
 import { Play, Square, FolderTree, Tag, Trash2, X, RotateCcw } from 'lucide-react';
 import { useEnvironmentDialogStore, useEnvironmentSelectionStore, useEnvironmentFiltersStore } from '../stores';
 import { useEnvironmentOperations } from '../hooks/use-environment-operations';
+import type { Environment } from '../types';
 
 interface EnvironmentBatchActionsProps {
+  environments: Environment[];
+  startIndex: number;
   onComplete?: () => void;
 }
 
-export function EnvironmentBatchActions({ onComplete }: EnvironmentBatchActionsProps) {
+export function EnvironmentBatchActions({
+  environments,
+  startIndex,
+  onComplete,
+}: EnvironmentBatchActionsProps) {
   const { t } = useTranslation('environment');
   const selectionStore = useEnvironmentSelectionStore();
   const dialogStore = useEnvironmentDialogStore();
@@ -19,12 +26,24 @@ export function EnvironmentBatchActions({ onComplete }: EnvironmentBatchActionsP
   if (selectedCount === 0) return null;
 
   const selectedIds = Array.from(selectionStore.selectedIds);
+  const selectedStartItems = environments.reduce<Array<{ envUuid: string; displayId: string }>>(
+    (items, environment, index) => {
+      if (selectionStore.selectedIds.has(environment.uuid)) {
+        items.push({
+          envUuid: environment.uuid,
+          displayId: String(startIndex + index + 1),
+        });
+      }
+      return items;
+    },
+    []
+  );
   const isTrashMode = filtersStore.viewType === 'trash';
 
   const handleBatchStart = async () => {
     if (selectedCount === 0) return;
     try {
-      await operations.batchStart(selectedIds);
+      await operations.batchStart(selectedStartItems);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '批量启动失败');
     }

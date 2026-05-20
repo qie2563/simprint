@@ -33,16 +33,21 @@ import {
   batchStopEnvironmentsRuntime,
 } from '../../../../services/environment/src';
 
+interface BatchStartItem {
+  envUuid: string;
+  displayId: string;
+}
+
 interface UseEnvironmentOperationsReturn {
   submitting: boolean;
   loadingEnvUuid: string | null;
   kernelStatusMessage: string;
-  startEnvironment: (id: string) => Promise<Environment>;
+  startEnvironment: (id: string, displayId: string) => Promise<Environment>;
   stopEnvironment: (id: string) => Promise<void>;
-  toggleEnvironment: (id: string) => Promise<Environment | void>;
+  toggleEnvironment: (id: string, displayId: string) => Promise<Environment | void>;
   deleteEnvironment: (id: string) => Promise<void>;
   updateEnvironment: (id: string, data: Partial<Environment>) => Promise<Environment>;
-  batchStart: (ids: string[]) => Promise<Environment[]>;
+  batchStart: (items: BatchStartItem[]) => Promise<Environment[]>;
   batchStop: (ids: string[]) => Promise<void>;
   batchUpdateProxy: (ids: string[], proxy: string) => Promise<Environment[]>;
   batchMoveToGroup: (ids: string[], groupId: string, groupName?: string, groupColor?: string) => Promise<Environment[]>;
@@ -102,11 +107,11 @@ export function useEnvironmentOperations(onComplete?: () => void): UseEnvironmen
         ? '准备中...'
         : '';
 
-  const startEnvironment = async (id: string): Promise<Environment> => {
+  const startEnvironment = async (id: string, displayId: string): Promise<Environment> => {
     setSubmitting(true);
     setLoadingEnvUuid(id);
     try {
-      await startEnvironmentRuntime(id);
+      await startEnvironmentRuntime(id, displayId);
       await refreshStatus(id);
       return {} as Environment;
     } catch (error) {
@@ -135,11 +140,11 @@ export function useEnvironmentOperations(onComplete?: () => void): UseEnvironmen
     }
   };
 
-  const toggleEnvironment = async (id: string): Promise<Environment | void> => {
+  const toggleEnvironment = async (id: string, displayId: string): Promise<Environment | void> => {
     if (isRunning(id)) {
       return stopEnvironment(id);
     }
-    return startEnvironment(id);
+    return startEnvironment(id, displayId);
   };
 
   const deleteEnvironmentOp = async (id: string): Promise<void> => {
@@ -160,11 +165,15 @@ export function useEnvironmentOperations(onComplete?: () => void): UseEnvironmen
     return {} as Environment;
   };
 
-  const batchStart = async (ids: string[]): Promise<Environment[]> => {
+  const batchStart = async (items: BatchStartItem[]): Promise<Environment[]> => {
     setSubmitting(true);
     try {
+      const ids = items.map((item) => item.envUuid);
       const notRunningIds = ids.filter((id) => !isRunning(id));
       const alreadyRunningIds = ids.filter((id) => isRunning(id));
+      const displayIdsByEnvUuid = Object.fromEntries(
+        items.map((item) => [item.envUuid, item.displayId])
+      );
 
       alreadyRunningIds.forEach((id) => triggerShake(id));
 
@@ -174,7 +183,10 @@ export function useEnvironmentOperations(onComplete?: () => void): UseEnvironmen
 
       notRunningIds.forEach((id) => setStatus(id, 'starting'));
 
-      const results = await batchStartEnvironmentsRuntime(notRunningIds);
+      const results = await batchStartEnvironmentsRuntime(
+        notRunningIds,
+        displayIdsByEnvUuid
+      );
 
       for (const result of results) {
         if (!result.success) {

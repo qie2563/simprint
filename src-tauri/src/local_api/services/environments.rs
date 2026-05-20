@@ -201,6 +201,7 @@ pub async fn start_environment_service(
         env_uuid.clone(),
         launch_paths,
         None,
+        None,
     )
     .await
     .map_err(|error| (StatusCode::BAD_GATEWAY, error.to_string()))?;
@@ -240,6 +241,7 @@ pub async fn batch_start_environments_local_service(
     let results = EnvironmentLaunchRuntimeService::batch_start_environments_by_uuid(
         payload.env_uuids,
         launch_paths,
+        None,
         None,
     )
     .await

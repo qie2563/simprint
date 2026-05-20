@@ -120,7 +120,11 @@ pub async fn batch_launch_environments(
 }
 
 #[tauri::command]
-pub async fn start_environment_by_uuid(app: AppHandle, env_uuid: String) -> Result<()> {
+pub async fn start_environment_by_uuid(
+    app: AppHandle,
+    env_uuid: String,
+    display_id: Option<String>,
+) -> Result<()> {
     let launch_paths = EnvironmentLaunchRuntimeService::resolve_launch_paths(&app)?;
     let status_emitter =
         Some(crate::services::environment::kernel::utils::build_tauri_status_emitter(app));
@@ -128,6 +132,7 @@ pub async fn start_environment_by_uuid(app: AppHandle, env_uuid: String) -> Resu
         env_uuid,
         launch_paths,
         status_emitter,
+        display_id,
     )
     .await
 }
@@ -136,6 +141,7 @@ pub async fn start_environment_by_uuid(app: AppHandle, env_uuid: String) -> Resu
 pub async fn batch_start_environments_by_uuid(
     app: AppHandle,
     env_uuids: Vec<String>,
+    display_ids_by_env_uuid: Option<std::collections::HashMap<String, String>>,
 ) -> Result<Vec<BatchLaunchResult>> {
     let launch_paths = EnvironmentLaunchRuntimeService::resolve_launch_paths(&app)?;
     let status_emitter =
@@ -144,6 +150,7 @@ pub async fn batch_start_environments_by_uuid(
         env_uuids,
         launch_paths,
         status_emitter,
+        display_ids_by_env_uuid,
     )
     .await
 }

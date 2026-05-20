@@ -111,6 +111,7 @@ impl LocalApiBridge {
             env_uuid.to_string(),
             launch_paths,
             None,
+            None,
         )
         .await
         .map_err(|error| McpToolError::upstream(error.to_string()))?;
@@ -146,6 +147,7 @@ impl LocalApiBridge {
         EnvironmentLaunchRuntimeService::batch_start_environments_by_uuid(
             env_uuids,
             launch_paths,
+            None,
             None,
         )
         .await
