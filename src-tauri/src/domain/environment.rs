@@ -1,4 +1,3 @@
-//! 环境/内核领域模型
 //!
 //! 封装浏览器环境和内核相关的业务规则
 
@@ -99,6 +98,21 @@ impl KernelDetail {
     }
 }
 
+/// 环境指纹配置绑定
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentFingerprintBinding {
+    /// 环境 UUID
+    pub env_uuid: String,
+    /// 关联的指纹配置 ID
+    pub fingerprint_profile_id: String,
+    /// 内核版本
+    pub kernel_version: String,
+    /// 绑定创建时间
+    pub created_at: String,
+    /// 绑定更新时间
+    pub updated_at: String,
+}
+
 /// 环境领域对象
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Environment {
@@ -110,6 +124,8 @@ pub struct Environment {
     pub status: EnvironmentStatus,
     /// 内核详情
     pub kernel_detail: KernelDetail,
+    /// 指纹配置绑定
+    pub fingerprint_binding: Option<EnvironmentFingerprintBinding>,
 }
 
 impl Environment {
@@ -120,26 +136,30 @@ impl Environment {
             kernel_value,
             status: EnvironmentStatus::Verifying,
             kernel_detail,
+            fingerprint_binding: None,
         }
     }
 
     /// 转换状态
-    pub fn transition_to(&mut self, new_status: EnvironmentStatus) {
-        self.status = new_status;
+    pub fn with_status(mut self, status: EnvironmentStatus) -> Self {
+        self.status = status;
+        self
     }
 
-    /// 是否可以启动
-    pub fn can_launch(&self) -> bool {
-        self.status.can_launch()
-    }
-
-    /// 是否正在运行
-    pub fn is_running(&self) -> bool {
-        self.status.is_running()
-    }
-
-    /// 验证内核是否有效
-    pub fn is_kernel_valid(&self) -> bool {
-        self.kernel_detail.is_hash_valid()
+    /// 绑定指纹配置
+    pub fn with_fingerprint_binding(
+        mut self,
+        profile_id: String,
+        kernel_version: String,
+    ) -> Self {
+        let now = chrono::Local::now().to_rfc3339();
+        self.fingerprint_binding = Some(EnvironmentFingerprintBinding {
+            env_uuid: self.env_uuid.clone(),
+            fingerprint_profile_id: profile_id,
+            kernel_version,
+            created_at: now.clone(),
+            updated_at: now,
+        });
+        self
     }
 }
